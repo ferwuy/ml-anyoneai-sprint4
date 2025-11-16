@@ -135,3 +135,5 @@ db_data/*
 
 # Ignore locally stored images folder
 data/images/
+
+Embeddings_test/
