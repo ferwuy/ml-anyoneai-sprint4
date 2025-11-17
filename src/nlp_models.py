@@ -157,21 +157,37 @@ class HuggingFaceEmbeddings:
             device (str, optional): Device to use for model processing. Defaults to 'cuda' if available, otherwise 'cpu'.
         """
         self.model_name = model_name
-        # TODO: Load the Hugging Face tokenizer from a pre-trained model
-        self.tokenizer = None
-        # TODO: Load the model from the Hugging Face model hub from the specified model name
-        self.model = None
+        # Load the Hugging Face tokenizer from a pre-trained model
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        # Load the model from the Hugging Face model hub from the specified model name
+        self.model = AutoModel.from_pretrained(model_name)
         self.path = path
         self.save_path = save_path or 'Models'
         
-        # Define device
+        # Define device with robust fallback
         if device is None:
-            # Note: If you have a mac, you may want to change 'cupa' to 'mps' to use GPU
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
-            self.device = torch.device(device)
+            # Try to use the requested device, fallback if not available
+            requested = device.lower()
+            if requested == 'mps':
+                if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    self.device = torch.device('mps')
+                elif torch.cuda.is_available():
+                    print("Warning: 'mps' device requested but not available. Falling back to 'cuda'.")
+                    self.device = torch.device('cuda')
+                else:
+                    print("Warning: 'mps' device requested but not available. Falling back to 'cpu'.")
+                    self.device = torch.device('cpu')
+            elif requested == 'cuda':
+                if torch.cuda.is_available():
+                    self.device = torch.device('cuda')
+                else:
+                    print("Warning: 'cuda' device requested but not available. Falling back to 'cpu'.")
+                    self.device = torch.device('cpu')
+            else:
+                self.device = torch.device('cpu')
         print(f"Using device: {self.device}")
-        
         # Move model to the specified device
         self.model.to(self.device)
         print(f"Model moved to device: {self.device}")
@@ -187,32 +203,28 @@ class HuggingFaceEmbeddings:
         Returns:
             np.ndarray: A numpy array containing the embedding vector for the input text.
         """
-        ### TODO: Tokenize the input text using the Hugging Face tokenizer
-        inputs = None
-        
+        # Tokenize the input text using the Hugging Face tokenizer
+        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding="max_length", max_length=512)
         # Move the inputs to the device
         inputs = {key: value.to(self.device) for key, value in inputs.items()}
-        
         with torch.no_grad():
-            # TODO: Generate the embeddings using the Hugging Face model from the tokenized input
-            outputs = None
-        
-        # TODO: Extract the embeddings from the model output, send to cpu and return the numpy array
-        # Remember that the model will return embeddings for the whole sequence, so you may need to aggregate them
+            # Generate the embeddings using the Hugging Face model from the tokenized input
+            outputs = self.model(**inputs)
+        # Extract the embeddings from the model output, send to cpu and return the numpy array
         # Get the last hidden state and take the mean across the sequence dimension
-        # The resulting tensor should have shape [batch_size, hidden_size]
-        embeddings = None
-        
+        last_hidden_state = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
+        # Take mean over sequence dimension (dim=1)
+        embeddings = last_hidden_state.mean(dim=1).squeeze().cpu().numpy()
         return embeddings
 
     def get_embedding_df(self, column, directory, file):
         # Load the CSV file
         df = pd.read_csv(self.path)
-        # TODO: Generate embeddings for the specified column using the `get_embedding` method
-        # Make sure to convert the embeddings to a list before saving to the DataFrame
-        df["embeddings"] = None
-        
+        # Generate embeddings for the specified column using the `get_embedding` method
+        df["embeddings"] = df[column].astype(str).apply(lambda x: self.get_embedding(x).tolist())
         os.makedirs(directory, exist_ok=True)
-        # TODO: Save the DataFrame with the embeddings to a new CSV file in the specified directory
+        # Save the DataFrame with the embeddings to a new CSV file in the specified directory
+        output_path = os.path.join(directory, file)
+        df.to_csv(output_path, index=False)
         
 
