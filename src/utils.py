@@ -192,21 +192,25 @@ def train_test_split_and_feature_extraction(df, test_size=0.3, random_state=42):
     train_df, test_df, text_columns, image_columns, label_columns = train_test_split_and_feature_extraction(df)
     """
 
-    # Split the data into train and test sets
-    train_df, test_df = train_test_split(df, test_size=test_size, random_state=random_state, stratify=df.iloc[:, -1] if df.iloc[:, -1].nunique() > 1 else None)
-
     # Identify text embedding columns (e.g., text_1, text_2, ...)
     text_columns = [col for col in df.columns if col.startswith('text_')]
     # Identify image embedding columns (e.g., image_1, image_2, ...)
     image_columns = [col for col in df.columns if col.startswith('image_')]
-    # Identify label column(s): assume the last column is the label if not embedding
-    # If there are multiple non-embedding columns, select the one(s) not in text/image columns
+    # Identify label column(s): columns not in embeddings and not 'image_path'
     embedding_cols = set(text_columns + image_columns)
-    label_columns = [col for col in df.columns if col not in embedding_cols]
-    # Exclude 'image_path' if present, as it's not a label
-    label_columns = [col for col in label_columns if col != 'image_path']
+    label_candidates = [col for col in df.columns if col not in embedding_cols and col != 'image_path']
     # If multiple, keep only the last as label (common in merged df)
-    if len(label_columns) > 1:
-        label_columns = [label_columns[-1]]
+    label_columns = [label_candidates[-1]] if len(label_candidates) > 0 else []
+
+    # Split the data into train and test sets, stratify if possible
+    stratify_col = df[label_columns[0]] if label_columns and df[label_columns[0]].nunique() > 1 else None
+    train_df, test_df = train_test_split(df, test_size=test_size, random_state=random_state, stratify=stratify_col)
+
+    # Ensure binary labels are 0 and 1 for binary classification
+    if label_columns and len(label_columns) == 1:
+        unique_labels = set(train_df[label_columns[0]].unique())
+        if unique_labels == {1, 2}:
+            train_df[label_columns[0]] -= 1
+            test_df[label_columns[0]] -= 1
 
     return train_df, test_df, text_columns, image_columns, label_columns
