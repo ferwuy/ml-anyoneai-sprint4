@@ -192,19 +192,21 @@ def train_test_split_and_feature_extraction(df, test_size=0.3, random_state=42):
     train_df, test_df, text_columns, image_columns, label_columns = train_test_split_and_feature_extraction(df)
     """
 
-    # Split the data:
-    # TODO: Split the data into train and test sets setting using the test_size and random_state parameters
-    train_df, test_df = None, None
+    # Split the data into train and test sets
+    train_df, test_df = train_test_split(df, test_size=test_size, random_state=random_state, stratify=df.iloc[:, -1] if df.iloc[:, -1].nunique() > 1 else None)
 
-    # Select features and labels vectors:
-    # Features
-    # TODO: Select the name of the columns with the text embeddings and return it as a list (Even if there is only one column)
-    # Make sure to select only the columns that are actually text embeddings, that means text_1, text_2, etc.
-    text_columns = [None]
-    # TODO: Select the name of the columns with the image embeddings and return it as a list (Even if there is only one column)
-    # Make sure to select only the columns that are actually image embeddings, that means image_1, image_2, etc.
-    image_columns = [None]
-    # TODO: Select the name of the column with the class labels and return it as a list (Even if there is only one column)
-    label_columns = [None]
+    # Identify text embedding columns (e.g., text_1, text_2, ...)
+    text_columns = [col for col in df.columns if col.startswith('text_')]
+    # Identify image embedding columns (e.g., image_1, image_2, ...)
+    image_columns = [col for col in df.columns if col.startswith('image_')]
+    # Identify label column(s): assume the last column is the label if not embedding
+    # If there are multiple non-embedding columns, select the one(s) not in text/image columns
+    embedding_cols = set(text_columns + image_columns)
+    label_columns = [col for col in df.columns if col not in embedding_cols]
+    # Exclude 'image_path' if present, as it's not a label
+    label_columns = [col for col in label_columns if col != 'image_path']
+    # If multiple, keep only the last as label (common in merged df)
+    if len(label_columns) > 1:
+        label_columns = [label_columns[-1]]
 
     return train_df, test_df, text_columns, image_columns, label_columns
