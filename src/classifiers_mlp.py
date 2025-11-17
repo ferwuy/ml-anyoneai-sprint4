@@ -77,24 +77,42 @@ class MultimodalDataset(Sequence):
             ValueError: If both text_cols and image_cols are None or empty.
         """
         if text_cols:
-            # TODO: Get the text data from the DataFrame as a NumPy array
-            self.text_data = None
+            # Get the text data from the DataFrame as a NumPy array
+            if len(text_cols) == 1:
+                self.text_data = df[text_cols[0]].to_numpy()
+                # If text is a single column, ensure shape is (N, 1) for consistency
+                if self.text_data.ndim == 1:
+                    self.text_data = self.text_data.reshape(-1, 1)
+            else:
+                self.text_data = df[text_cols].to_numpy()
         else:
-            # Else, set text data to None
             self.text_data = None
-            
+
         if image_cols:
-            # TODO: Get the image data from the DataFrame as a NumPy array
-            self.image_data = None
+            # Get the image data from the DataFrame as a NumPy array
+            if len(image_cols) == 1:
+                self.image_data = df[image_cols[0]].to_numpy()
+                if self.image_data.ndim == 1:
+                    self.image_data = self.image_data.reshape(-1, 1)
+            else:
+                self.image_data = df[image_cols].to_numpy()
         else:
-            # Else, set image data to None
             self.image_data = None
-            
+
         if not text_cols and not image_cols:
             raise ValueError("At least one of text_cols or image_cols must be provided.")
-        
-        # TODO: Get the labels from the DataFrame and encode them
-        self.labels = None
+
+
+        # Support label_col as string or list
+        if isinstance(label_col, list):
+            # If label_col is a list, flatten to 1D array (assume single label column)
+            if len(label_col) == 1:
+                self.labels = df[label_col[0]].to_numpy()
+            else:
+                # If multiple columns, treat as multi-label (not supported by LabelEncoder)
+                raise ValueError("label_col as a list with multiple columns is not supported for single-label classification.")
+        else:
+            self.labels = df[label_col].to_numpy()
 
         # Use provided encoder or fit a new one
         if encoder is None:
@@ -103,11 +121,11 @@ class MultimodalDataset(Sequence):
         else:
             self.encoder = encoder
             self.labels = self.encoder.transform(self.labels)
-        
+
         # One-hot encode labels for multi-class classification
         num_classes = len(self.encoder.classes_)
         self.labels = np.eye(num_classes)[self.labels]
-        
+
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.on_epoch_end()
@@ -195,52 +213,52 @@ def create_early_fusion_model(text_input_size, image_input_size, output_size, hi
     
     if text_input_size is None and image_input_size is None:
         raise ValueError("At least one of text_input_size and image_input_size must be provided.")
-    
+
+    # Define input layers
     if text_input_size is not None:
-        # TODO: Define text input layer for only text data
+        text_input = Input(shape=(text_input_size,), name="text")
+    else:
         text_input = None
     if image_input_size is not None:
-        # TODO: Define image input layer for only image data
+        image_input = Input(shape=(image_input_size,), name="image")
+    else:
         image_input = None
-    
-    
-    if text_input_size is not None and image_input_size is not None:
-        # TODO: Concatenate text and image inputs if both are provided
-        x = None
-    elif text_input_size is not None:
+
+    # Concatenate or use single input
+    if text_input is not None and image_input is not None:
+        x = Concatenate()([text_input, image_input])
+    elif text_input is not None:
         x = text_input
-    elif image_input_size is not None:
+    elif image_input is not None:
         x = image_input
 
+    # Add normalization
+    x = BatchNormalization()(x)
+
+    # Add hidden layers
     if isinstance(hidden, int):
-        # TODO: Add a single dense layer 
-        # Optionally play with activation, dropout and normalization
-        x = None
-        x = None
+        x = Dense(hidden, activation="relu")(x)
+        x = Dropout(p)(x)
+        x = BatchNormalization()(x)
     elif isinstance(hidden, list):
         for h in hidden:
-            # TODO: Add multiple dense layers based on the hidden list
-            # Optionally play with activation, dropout and normalization
-            x = None
-            x = None
-            x = None
+            x = Dense(h, activation="relu")(x)
+            x = Dropout(p)(x)
+            x = BatchNormalization()(x)
 
-    # TODO: Add the output layer with softmax activation
-    output = None
+    # Output layer
+    output = Dense(output_size, activation="softmax", name="output")(x)
 
-    # Create the model
-    if text_input_size is not None and image_input_size is not None:
-        # TODO: Define the model with both text and image inputs
-        model = None
-    elif text_input_size is not None:
-        # TODO: Define the model with only text input
-        model = None
-    elif image_input_size is not None:
-        # TODO: Define the model with only image input
-        model = None
+    # Build model
+    if text_input is not None and image_input is not None:
+        model = Model(inputs=[text_input, image_input], outputs=output)
+    elif text_input is not None:
+        model = Model(inputs=text_input, outputs=output)
+    elif image_input is not None:
+        model = Model(inputs=image_input, outputs=output)
     else:
         raise ValueError("At least one of text_input_size and image_input_size must be provided.")
-    
+
     return model
 
 def test_model(y_test, y_pred, y_prob=None, encoder=None):
@@ -365,41 +383,51 @@ def train_mlp(train_loader, test_loader, text_input_size, image_input_size, outp
         np.random.seed(seed)
         tf.random.set_seed(seed)
       
-    # Create an instance of the early fusion model  
-    # TODO: Create an early fusion model using the provided input sizes and output size
-    model = None
+    # Create an instance of the early fusion model
+    model = create_early_fusion_model(text_input_size, image_input_size, output_size, hidden=[128, 64], p=p)
 
     # Compute class weights for imbalanced datasets
     if set_weights:
         class_indices = np.argmax(train_loader.labels, axis=1)
-        # TODO: Compute class weights using the training labels
-        # You should use the `compute_class_weight` function from scikit-learn.
-        class_weights = None
-        class_weights = {i: weight for i, weight in enumerate(class_weights)}
-
-    # TODO: Choose the loss function for multi-class classification
-    loss = None
-
-    # Choose the optimizer
-    if adam:
-        # TODO: Use the Adam optimizer with the specified learning rate
-        optimizer = None
+        class_weights_arr = compute_class_weight(class_weight='balanced', classes=np.unique(class_indices), y=class_indices)
+        class_weights = {i: weight for i, weight in enumerate(class_weights_arr)}
     else:
-        # TODO: Use the SGD optimizer with the specified learning rate
-        optimizer = None
+        class_weights = None
 
-    # TODO: Compile the model with the chosen optimizer and loss function
-    
+    # Loss function for multi-class classification
+    loss = CategoricalCrossentropy()
 
-    # TODO: Define an early stopping callback with the specified patience
-    early_stopping = None
+    # Optimizer
+    if adam:
+        optimizer = Adam(learning_rate=lr)
+    else:
+        optimizer = SGD(learning_rate=lr, momentum=0.9)
 
-    # TODO: Train the model using the training data and validation data
-    # Use the class weights if set_weights
-    # Use the early stopping callback
-    # Use the number of epochs specified
+    # Compile the model
+    model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
+
+    # Early stopping callback
+    early_stopping = EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True, verbose=1)
+
+    # Train the model
     if train_model:
-        history = None
+        if set_weights and class_weights is not None:
+            history = model.fit(
+                train_loader,
+                validation_data=test_loader,
+                epochs=num_epochs,
+                callbacks=[early_stopping],
+                class_weight=class_weights,
+                verbose=2
+            )
+        else:
+            history = model.fit(
+                train_loader,
+                validation_data=test_loader,
+                epochs=num_epochs,
+                callbacks=[early_stopping],
+                verbose=2
+            )
 
     if test_mlp_model:
         # Test the model on the test set
